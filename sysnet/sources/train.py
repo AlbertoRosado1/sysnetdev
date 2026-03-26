@@ -162,11 +162,12 @@ def evaluate(model, loss_fn, dataloader, params, return_ypred=False):
 
     return ret
 
-def forward(model, dataloader, params):
+def forward(model, dataloader, params, return_latent=False):
     model.eval()
 
     list_hpix = []
     list_ypred = []
+    list_latent = []
 
     with torch.no_grad():
 
@@ -176,15 +177,20 @@ def forward(model, dataloader, params):
             target = target.to(params['device'])
             fpix = fpix.to(params['device'])
 
-            output = model(data)       
+            if return_latent:
+                output, latent = model(data, return_latent=return_latent)
+                list_latent.append(latent)
+            else:
+                output = model(data)       
             list_hpix.append(hpix)
             list_ypred.append(output)
 
 
-        hpix = torch.cat(list_hpix)
-        ypred = torch.cat(list_ypred)
-
-    return hpix, ypred
+        hpix   = torch.cat(list_hpix)
+        ypred  = torch.cat(list_ypred)
+        latent = torch.cat(list_latent)
+    
+    return hpix, ypred, latent
 
 
 def train_and_eval(model, optimizer, loss_fn, dataloaders, params,

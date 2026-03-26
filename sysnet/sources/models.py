@@ -7,6 +7,8 @@ import torch.nn.functional as F
 
 import numpy as np
 
+# from sources import 
+
 import logging
 
 __all__ = ['DNN', 'LinearRegression', 'LinearNet', 'DNNPoisson', 'init_model']
@@ -60,13 +62,20 @@ class DNN(nn.Module):
                 self.fc.append(nn.Linear(nb_units, nb_units))
                 self.bn.append(nn.BatchNorm1d(nb_units))
 
-    def forward(self, x):
+    def forward(self, x, return_latent=False):
         for i in range(self.nb_layers):
             if i == self.nb_layers-1:
                 x = self.fc[i](x)
             else:
                 x = F.relu(self.fc[i](x))
                 x = self.bn[i](x)
+
+                # Save last hidden layer
+                if i == self.nb_layers - 2:
+                    latent = x
+        
+        if return_latent:
+            return x, latent
         return x
 
 
@@ -88,7 +97,11 @@ class DNNPoisson(DNN):
                                          input_dim=input_dim, output_dim=output_dim,
                                          seed=seed)
 
-    def forward(self, x):
+    def forward(self, x, return_latent=False):
+        if return_latent:
+            x, latent = super(DNNPoisson, self).forward(x, return_latent=True)
+            return F.softplus(x), latent
+            
         x = super(DNNPoisson, self).forward(x)
         return F.softplus(x)
 
@@ -186,3 +199,37 @@ class LinearRegression:
         if (not has_bias) & self.add_bias:
             x = torch.cat((torch.ones(x.shape[0]).unsqueeze(1), x), 1)
         return torch.matmul(x, self.coef_)
+
+
+class LatentEnsemble(nn.Module):
+    '''
+    inspired by MyEnsemble(): https://discuss.pytorch.org/u/ptrblck/
+    NOTE: Unfinished
+    
+    '''
+    def __init__(self, models, latent_dim, output_dim=1):
+        super(LatentEnsemble, self).__init__()
+        
+        self.models = nn.ModuleList(models)
+        
+        # Freeze pretrained models
+        for model in self.models:
+            model.eval()
+            for param in model.parameters():
+                param.requires_grad = False
+                
+        total_features = latent_dim * len(models)
+        self.meta = nn.Sequential(nn.Linear(total_features, total_features // 2),
+                                  nn.ReLU(),
+                                  nn.Linear(total_features // 2, output_dim))
+
+    def forward(self, x):
+        latents = []
+        for model in self.models:
+            _, latent = model(x, return_latent=True)
+            latents.append(latent)
+
+        combined = torch.cat(latents, dim=1)
+
+        return self.meta(combined)
+

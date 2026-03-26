@@ -765,11 +765,15 @@ class TrainedModel:
         checkpoint = src.load_checkpoint(checkpoint, self.dnnx)
         self.stats =  checkpoint['stats']
         
-    def forward(self, indata, axes):
+    def forward(self, indata, axes, return_latent=False):
         dl = src.load_data(indata, self.stats, axes)
-        
-        result = src.forward(self.dnnx, dl, {'device':'cpu'})
+
+        result = src.forward(self.dnnx, dl, {'device':'cpu'}, return_latent=True)
         hpix = result[0].numpy()            
         nnw = result[1].numpy().flatten()
         #return Table([hpix, nnw], names=['hpix', 'weight'])
-        return (hpix, nnw)
+        if return_latent:
+            return (hpix, nnw, result[2])
+        else:
+            return (hpix, nnw)
+
